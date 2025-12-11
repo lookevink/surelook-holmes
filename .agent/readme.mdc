@@ -1,0 +1,98 @@
+---
+alwaysApply: false
+---
+
+
+# Sure-Look Holmes Design Document
+
+**Tagline:** Your personal CRM that sees, remembers, and connects.
+
+## 1. The Core Concept
+
+Networking is hard. Remembering faces and details about everyone you meet is impossible.
+
+**Sure-Look Holmes** is a multimodal personal CRM designed for wearable integration (e.g., Meta Ray-Bans) that:
+
+*   **Sees:** Runs real-time, client-side computer vision to detect faces and context.
+*   **Identifies:** Uses biometric embeddings to recognize individuals instantly from your network.
+*   **Remembers:** Utilizes an "Event Stream" memory architecture to recall specific details from past interactions ("Met at EthGlobal, looking for a co-founder").
+*   **Briefs:** Provides discreet, real-time context and conversation starters to help you master any social situation.
+
+## 2. The Tech Stack
+
+We are prioritizing low latency and modern architecture suitable for wearable tethering.
+
+*   **Frontend:** [Next.js 15](https://nextjs.org/) (App Router).
+*   **Vision (Client-Side):** [@vladmandic/human](https://github.com/vladmandic/human) (WebGPU/WebGL accelerated).
+    *   *Why:* Zero latency bounding boxes, runs in browser, no privacy risk for video stream.
+*   **Voice:** [ElevenLabs](https://elevenlabs.io/) (Turbo v2.5 Model via WebSocket).
+    *   *Why:* Lowest latency voice-to-voice capability for discreet audio feedback.
+*   **Intelligence:** [OpenAI GPT-4o](https://platform.openai.com/docs/models/gpt-4o) (Vision + Text).
+    *   *Why:* Best-in-class reasoning for synthesizing context and generating social cues.
+*   **Memory & Database:** [Supabase](https://supabase.com/) (PostgreSQL).
+*   **Vector Store:** [pgvector](https://github.com/pgvector/pgvector) (for Face Embeddings).
+*   **Real-time:** [Supabase Realtime](https://supabase.com/docs/guides/realtime) (for live updates).
+
+## 3. Data Architecture (The "Event Stream")
+
+We move beyond static profiles to a chronological event log of your network.
+
+### Schema Overview
+
+*   **`identities`**: The "Who."
+    *   Stores `face_embedding` (1024-float vector), name, and relationship status.
+*   **`sessions`**: The "Interaction."
+    *   Groups events into a meeting or conversation.
+*   **`events`**: The "Stream."
+    *   Chronological log of interactions.
+    *   **Types:** `VISUAL_OBSERVATION`, `CONVERSATION_NOTE`, `AGENT_WHISPER`.
+    *   **Example:** "10:05 AM - Visual: Subject is wearing a YC hoodie." -> "10:06 AM - Agent: 'Ask about their batch.'"
+
+## 4. Key Features
+
+1.  **Instant Face Recognition:** The moment someone steps in frame, the system identifies them.
+2.  **Visual Context Injection:** The Agent sees what they are wearing or holding (e.g., a conference badge) to provide immediate context.
+3.  **Long-Term Memory:** If a contact mentions they are raising a seed round, it stores that. Next time you see them, it prompts: "Ask about the fundraise."
+4.  **The "Chief of Staff" Persona:** A helpful, professional, and discreet assistant that ensures you never forget a face or a detail.
+
+## 5. The Demo Narrative: "The Ultimate Networker"
+
+**Constraint:** The presenter is the only live subject available.
+**Solution:** A 3-Act structure utilizing a mask and photos to simulate a networking event.
+
+### Act 1: The Cold Approach (Vision + Reasoning)
+*   **Scene:** Presenter enters wearing a mask/sunglasses (simulating an unknown contact).
+*   **Tech:** System detects a face but marks it Unknown.
+*   **Action:** The Agent analyzes visual cues.
+*   **Dialogue:**
+    *   **Agent:** "I see a new contact. They're obscuring their face, but judging by the hoodie, they might be in tech. Proceed with a friendly introduction."
+    *   **Presenter:** "Hi, I'm testing my networking gear."
+
+### Act 2: The Industry Scan (Multimodal Flex)
+*   **Scene:** Presenter holds up printed photos of famous tech figures (e.g., Jensen Huang).
+*   **Tech:** Human.js detects faces on the paper. GPT-4o retrieves public info.
+*   **Dialogue:**
+    *   **Presenter:** "Who is this?" (Shows photo).
+    *   **Agent:** "That's Jensen Huang, CEO of NVIDIA. Key topics: AI chips, leather jackets, and the trillion-dollar club. Don't mention the stock price drop."
+
+### Act 3: The Warm Connection (Memory Payoff)
+*   **Scene:** Presenter removes the mask.
+*   **Tech:** Human.js matches the face embedding to the "VIP" profile. Latency < 1s.
+*   **Action:** The Agent recognizes the user.
+*   **Dialogue:**
+    *   **Agent:** "Ah, that's [Name]. You last met at the Hackathon kickoff. You need to follow up on that PRD you promised to write."
+    *   **Presenter:** "On it."
+    *   **Agent:** "Good. Don't let the connection go cold."
+
+## 6. Hackathon Scoring Alignment
+
+*   **Innovation (5/5):** Applying face recognition and LLMs to a "smart glasses" use case is a high-value application.
+*   **Technical Complexity (5/5):** Real-time vision and vector search on the edge/browser is technically impressive.
+*   **Presentation (5/5):** The "Personal CRM" angle is relatable and solves a real pain point for judges and attendees.
+
+## 7. Immediate Next Steps
+
+1.  Initialize Next.js with `@vladmandic/human`.
+2.  Set up Supabase with `pgvector` extension.
+3.  Seed Database with the Presenter's face and a "networking note."
+4.  Build the "Chief of Staff" System Prompt.
