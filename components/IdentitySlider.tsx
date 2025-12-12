@@ -13,7 +13,12 @@ interface Identity {
   linkedin_url: string | null;
 }
 
-export default function IdentitySlider() {
+interface IdentitySliderProps {
+  selectedIdentityId?: string | null;
+  onSelectIdentity?: (identity: Identity) => void;
+}
+
+export default function IdentitySlider({ selectedIdentityId, onSelectIdentity }: IdentitySliderProps) {
   const [identities, setIdentities] = useState<Identity[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -57,7 +62,12 @@ export default function IdentitySlider() {
           {identities.map((identity) => (
             <div
               key={identity.id}
-              className="flex-none w-48 bg-gray-50 rounded-lg border border-gray-200 p-3 flex flex-col items-center snap-start hover:shadow-md transition-shadow"
+              onClick={() => onSelectIdentity?.(identity)}
+              className={`flex-none w-48 bg-gray-50 rounded-lg border p-3 flex flex-col items-center snap-start hover:shadow-md transition-all cursor-pointer ${
+                selectedIdentityId === identity.id
+                  ? "border-blue-500 border-2 shadow-lg"
+                  : "border-gray-200"
+              }`}
             >
               <div className="relative w-24 h-24 mb-3 rounded-full overflow-hidden bg-gray-200 border-2 border-white shadow-sm">
                 {identity.headshot_media_url ? (

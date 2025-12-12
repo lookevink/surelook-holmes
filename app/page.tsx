@@ -1,16 +1,49 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import SherlockScanner from "./components/SherlockScanner";
 import EventStream from "@/components/EventStream";
 import VoiceManager from "./components/VoiceManager";
-
+import HighlightedProfile from "@/components/HighlightedProfile";
 import IdentitySlider from "@/components/IdentitySlider";
+import { useVisualContext } from "./context/VisualContext";
+import { getIdentityById } from "@/lib/identities";
+
+interface Identity {
+  id: string;
+  name: string;
+  relationship_status: string | null;
+  headshot_media_url: string | null;
+  linkedin_url: string | null;
+}
 
 export default function Home() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [selectedIdentity, setSelectedIdentity] = useState<Identity | null>(null);
+  const { subscribe } = useVisualContext();
 
-  const handleEventCreated = () => {
+  // Subscribe to VisualContext to auto-select matched identities
+  useEffect(() => {
+    const unsubscribe = subscribe(async (context) => {
+      // When a face is matched (found: true) and has an ID, auto-select it
+      if (context.found && context.id) {
+        try {
+          // Fetch full identity data
+          const identityData = await getIdentityById(context.id);
+          setSelectedIdentity(identityData as Identity);
+          // Trigger refresh to update notes
+          setRefreshTrigger((prev) => prev + 1);
+        } catch (error) {
+          console.error("Error fetching matched identity:", error);
+        }
+      }
+    });
+
+    return unsubscribe;
+  }, [subscribe]);
+
+  const handleSelectIdentity = (identity: Identity) => {
+    setSelectedIdentity(identity);
     setRefreshTrigger((prev) => prev + 1);
   };
 
@@ -33,11 +66,20 @@ export default function Home() {
           </div>
 
           <div className="space-y-4">
-            <EventStream refreshTrigger={refreshTrigger} />
+            <div className="mb-4">
+              <HighlightedProfile 
+                identityId={selectedIdentity?.id || null} 
+                refreshTrigger={refreshTrigger}
+              />
+            </div>
+            {/* <EventStream refreshTrigger={refreshTrigger} /> */}
           </div>
         </div>
         
-        <IdentitySlider />
+        <IdentitySlider 
+          selectedIdentityId={selectedIdentity?.id || null}
+          onSelectIdentity={handleSelectIdentity}
+        />
       </main>
       <VoiceManager />
     </div>
