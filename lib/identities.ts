@@ -10,6 +10,8 @@ export async function createIdentity(params: {
   relationshipStatus?: string;
   faceEmbedding?: number[];
   metadata?: Record<string, unknown>;
+  headshotMediaUrl?: string | null;
+  linkedinUrl?: string | null;
 }) {
   const { data, error } = await supabase
     .from("identities")
@@ -18,6 +20,8 @@ export async function createIdentity(params: {
       relationship_status: params.relationshipStatus || null,
       face_embedding: params.faceEmbedding || null,
       metadata: params.metadata || {},
+      headshot_media_url: params.headshotMediaUrl || null,
+      linkedin_url: params.linkedinUrl || null,
     } as any)
     .select()
     .single();
