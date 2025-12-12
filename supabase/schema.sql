@@ -8,6 +8,8 @@ create table identities (
   name text not null,
   relationship_status text, -- e.g., "Co-worker", "Investor", "Friend"
   face_embedding vector(1024), -- 1024-dimensional vector for face embeddings
+  headshot_media_url text, -- URL to headshot image in Supabase storage
+  linkedin_url text, -- LinkedIn profile URL
   metadata jsonb default '{}'::jsonb -- Flexible field for extra details (LinkedIn, Twitter, etc.)
 );
 
@@ -76,4 +78,11 @@ create index if not exists events_session_id_idx on events(session_id);
 create index if not exists events_created_at_idx on events(created_at desc);
 create index if not exists events_related_identity_id_idx on events(related_identity_id);
 create index if not exists sessions_started_at_idx on sessions(started_at desc);
+
+-- IMPORTANT: Create the "headshots" storage bucket in Supabase Dashboard
+-- 1. Go to Storage in your Supabase dashboard
+-- 2. Click "New bucket"
+-- 3. Name it "headshots"
+-- 4. Make it public (or configure RLS policies as needed)
+-- 5. Save
 

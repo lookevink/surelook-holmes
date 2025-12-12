@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import type { Human, Config, Result } from "@vladmandic/human";
 import { processFaceDetection } from "../actions/process-face";
+import { uploadHeadshot } from "../actions/upload-headshot";
 import { useVisualContext } from "../context/VisualContext";
+import { extractFaceImage } from "@/lib/face-capture";
 
 const humanConfig: Partial<Config> = {
   // We want to run client-side
@@ -31,6 +33,7 @@ export default function SherlockScanner() {
   const [isReady, setIsReady] = useState(false);
   const [status, setStatus] = useState("Initializing...");
   const lastProcessedRef = useRef<number>(0);
+  const capturedHeadshotsRef = useRef<Set<string>>(new Set()); // Track which identities already have headshots
   const PROCESSING_INTERVAL_MS = 2000; // Process every 2 seconds
 
   // Initialize Human
@@ -103,20 +106,91 @@ export default function SherlockScanner() {
         const now = Date.now();
         if (now - lastProcessedRef.current > PROCESSING_INTERVAL_MS) {
           const face = result.face[0];
-          if (face.embedding) {
+          if (face.embedding && face.box) {
             lastProcessedRef.current = now;
             setStatus("Processing face...");
 
             // Call Server Action
             processFaceDetection(Array.from(face.embedding))
-              .then((res) => {
+              .then(async (res) => {
                 setStatus(res.message);
-                console.log("Identity Result:", res);
+                console.log("🔍 [HEADSHOT DEBUG] Identity Result:", {
+                  found: res.found,
+                  id: res.id,
+                  name: res.name,
+                  message: res.message,
+                });
+                
                 // UPDATE CONTEXT HERE
                 updateVisualContext({
                   ...res,
                   lastSeen: Date.now(),
                 });
+
+                // Capture and upload headshot for new faces
+                console.log("🔍 [HEADSHOT DEBUG] Checking conditions:", {
+                  "!res.found": !res.found,
+                  "res.id exists": !!res.id,
+                  "already captured": capturedHeadshotsRef.current.has(res.id || ""),
+                  "face.box exists": !!face.box,
+                  "video ready": !!videoRef.current && videoRef.current.readyState >= 2,
+                });
+
+                if (!res.found && res.id && !capturedHeadshotsRef.current.has(res.id)) {
+                  console.log("✅ [HEADSHOT DEBUG] Conditions met! Starting headshot capture...");
+                  
+                  if (!face.box) {
+                    console.error("❌ [HEADSHOT DEBUG] face.box is missing!");
+                    return;
+                  }
+
+                  if (!videoRef.current) {
+                    console.error("❌ [HEADSHOT DEBUG] videoRef.current is null!");
+                    return;
+                  }
+
+                  try {
+                    // Mark as captured immediately to prevent duplicate uploads
+                    capturedHeadshotsRef.current.add(res.id);
+                    console.log("📸 [HEADSHOT DEBUG] Marked as captured, extracting face image...");
+                    
+                    setStatus("Capturing headshot...");
+                    
+                    // Extract face image from video
+                    console.log("📸 [HEADSHOT DEBUG] Face box:", face.box);
+                    const faceBlob = await extractFaceImage(
+                      videoRef.current,
+                      face.box as [number, number, number, number]
+                    );
+                    console.log("📸 [HEADSHOT DEBUG] Face blob extracted:", {
+                      size: faceBlob.size,
+                      type: faceBlob.type,
+                    });
+                    
+                    // Upload to Supabase storage
+                    console.log("📤 [HEADSHOT DEBUG] Uploading to Supabase...");
+                    const uploadResult = await uploadHeadshot(res.id, faceBlob);
+                    console.log("📤 [HEADSHOT DEBUG] Upload result:", uploadResult);
+                    
+                    if (uploadResult.success) {
+                      console.log("✅ [HEADSHOT DEBUG] Headshot uploaded successfully:", uploadResult.url);
+                      setStatus(`${res.message} (Headshot saved)`);
+                    } else {
+                      console.error("❌ [HEADSHOT DEBUG] Failed to upload headshot:", uploadResult.error);
+                      // Remove from captured set so we can retry later
+                      capturedHeadshotsRef.current.delete(res.id);
+                    }
+                  } catch (captureError) {
+                    console.error("❌ [HEADSHOT DEBUG] Error capturing headshot:", captureError);
+                    console.error("❌ [HEADSHOT DEBUG] Error stack:", captureError instanceof Error ? captureError.stack : "No stack");
+                    // Remove from captured set so we can retry later
+                    capturedHeadshotsRef.current.delete(res.id);
+                  }
+                } else {
+                  console.log("⏭️ [HEADSHOT DEBUG] Skipping headshot capture:", {
+                    reason: !res.found ? "face was found (matched)" : !res.id ? "no identity ID" : "already captured",
+                  });
+                }
               })
               .catch((err) => {
                 console.error("Processing error:", err);

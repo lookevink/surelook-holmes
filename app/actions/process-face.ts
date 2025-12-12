@@ -1,5 +1,6 @@
 "use server";
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { supabase } from "@/lib/supabase";
 import { createIdentity } from "@/lib/identities";
 import { createEvent, getOrCreateActiveSession } from "@/lib/events";
@@ -29,14 +30,14 @@ export async function processFaceDetection(
 
     // Match face against existing identities
     // Using threshold 0.5 as mentioned in implementation log
-    const { data: matches, error: matchError } = await supabase.rpc(
+    const { data: matches, error: matchError } = (await supabase.rpc(
       "match_identity_by_face",
       {
         query_embedding: embedding as any,
         match_threshold: 0.5,
         match_count: 1,
-      }
-    ) as { data: any; error: any };
+      } as any
+    )) as { data: any; error: any };
 
     if (matchError) {
       console.error("Error matching face:", matchError);
@@ -73,14 +74,14 @@ export async function processFaceDetection(
     const newIdentityName = `New Contact ${timeString}`;
 
     try {
-      const newIdentity = await createIdentity({
+      const newIdentity = (await createIdentity({
         name: newIdentityName,
         relationshipStatus: "New",
         faceEmbedding: embedding,
         metadata: {
           created_via: "visual_scan",
         },
-      });
+      })) as { id: string; name: string; relationship_status: string | null };
 
       // Log first sighting event
       await createEvent({
@@ -98,18 +99,18 @@ export async function processFaceDetection(
         similarity: 1.0, // New identity, so similarity is 1.0
         message: `New contact detected: ${newIdentityName}`,
       };
-    } catch (createError: any) {
+    } catch (createError: unknown) {
       console.error("Error creating new identity:", createError);
       return {
         found: false,
         message: "Error creating new contact",
       };
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error in processFaceDetection:", error);
     return {
       found: false,
-      message: `Error processing face: ${error.message || "Unknown error"}`,
+      message: `Error processing face: ${error instanceof Error ? error.message : "Unknown error"}`,
     };
   }
 }

@@ -96,3 +96,9 @@ We move beyond static profiles to a chronological event log of your network.
 2.  Set up Supabase with `pgvector` extension.
 3.  Seed Database with the Presenter's face and a "networking note."
 4.  Build the "Chief of Staff" System Prompt.
+
+## Data type definition
+it's in [database.types.ts](/database.types.ts)
+
+generate types
+`npx supabase gen types typescript --project-id "dvncfurpflntfxnvnjgf" --schema public > database.types.ts`
