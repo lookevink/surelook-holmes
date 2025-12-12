@@ -13,7 +13,10 @@ const humanConfig: Partial<Config> = {
   modelBasePath: "https://unpkg.com/@vladmandic/human/models/",
   face: {
     enabled: true,
-    detector: { enabled: true },
+    detector: { 
+      enabled: true,
+      minConfidence: 0.5, // Minimum confidence threshold (0-1)
+    },
     mesh: { enabled: false },
     iris: { enabled: false },
     description: { enabled: true },
@@ -24,6 +27,10 @@ const humanConfig: Partial<Config> = {
   object: { enabled: true },
   gesture: { enabled: true },
 };
+
+// Additional confidence threshold for processing (higher than detector minConfidence)
+// This ensures we only process faces we're very confident about
+const FACE_CONFIDENCE_THRESHOLD = 0.6; // 70% confidence minimum
 
 export default function SherlockScanner() {
   const { updateVisualContext } = useVisualContext();
@@ -105,10 +112,28 @@ export default function SherlockScanner() {
       if (result.face && result.face.length > 0) {
         const now = Date.now();
         if (now - lastProcessedRef.current > PROCESSING_INTERVAL_MS) {
-          const face = result.face[0];
+          // Find the highest confidence face
+          const faces = result.face.filter(
+            (f) => f.score && f.score >= FACE_CONFIDENCE_THRESHOLD
+          );
+          
+          if (faces.length === 0) {
+            // No faces meet confidence threshold
+            console.log(`⏭️ [CONFIDENCE] No faces above ${FACE_CONFIDENCE_THRESHOLD} threshold. Highest:`, 
+              result.face[0]?.score || "N/A");
+            requestAnimationFrame(detect);
+            return;
+          }
+
+          // Sort by confidence and take the highest
+          const face = faces.sort((a, b) => (b.score || 0) - (a.score || 0))[0];
+          
           if (face.embedding && face.box) {
+            const confidence = face.score || 0;
+            console.log(`✅ [CONFIDENCE] Processing face with ${(confidence * 100).toFixed(1)}% confidence`);
+            
             lastProcessedRef.current = now;
-            setStatus("Processing face...");
+            setStatus(`Processing face (${(confidence * 100).toFixed(0)}% confident)...`);
 
             // Call Server Action
             processFaceDetection(Array.from(face.embedding))
@@ -133,6 +158,7 @@ export default function SherlockScanner() {
                   "res.id exists": !!res.id,
                   "already captured": capturedHeadshotsRef.current.has(res.id || ""),
                   "face.box exists": !!face.box,
+                  "face.confidence": face.score,
                   "video ready": !!videoRef.current && videoRef.current.readyState >= 2,
                 });
 
