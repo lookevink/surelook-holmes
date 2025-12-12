@@ -1,0 +1,320 @@
+"use client";
+
+import { useEffect, useRef, useState, useCallback } from "react";
+import type { Human, Config, Result } from "@vladmandic/human";
+import { createEvent, getOrCreateActiveSession } from "@/lib/events";
+import { findIdentityByFaceEmbedding } from "@/lib/identities";
+
+interface FaceDetection {
+  faceId: string;
+  confidence: number;
+  box: { x: number; y: number; width: number; height: number };
+  embedding?: number[];
+  identityId?: string;
+  identityName?: string;
+}
+
+interface FaceScannerProps {
+  onEventCreated?: () => void;
+}
+
+const humanConfig: Partial<Config> = {
+  backend: "webgl", // Use WebGL for better compatibility
+  modelBasePath: "https://unpkg.com/@vladmandic/human/models/",
+  face: {
+    enabled: true,
+    detector: {
+      enabled: true,
+      rotation: false, // Disable rotation for better performance
+      maxDetected: 10, // Max faces to detect
+    },
+    description: {
+      enabled: true, // Enable face embeddings
+      modelPath: "https://unpkg.com/@vladmandic/human/models/faceres.json",
+    },
+  },
+  object: {
+    enabled: true,
+    modelPath: "https://unpkg.com/@vladmandic/human/models/mobilenet.json",
+  },
+  gesture: {
+    enabled: false, // Disable for now to improve performance
+  },
+};
+
+export default function FaceScanner({ onEventCreated }: FaceScannerProps) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [human, setHuman] = useState<Human | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
+  const [detectedFaces, setDetectedFaces] = useState<FaceDetection[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const lastProcessedFacesRef = useRef<Set<string>>(new Set());
+
+  // Initialize Human.js
+  useEffect(() => {
+    const initHuman = async () => {
+      try {
+        // Dynamic import to avoid SSR issues
+        const HumanLibrary = (await import("@vladmandic/human")).default;
+        const instance = new HumanLibrary(humanConfig);
+        await instance.warmup(); // Pre-load models
+        setHuman(instance);
+      } catch (err) {
+        console.error("Error initializing Human.js:", err);
+        setError("Failed to initialize face detection. Please check your browser compatibility.");
+      }
+    };
+
+    initHuman();
+  }, []);
+
+  // Initialize session
+  useEffect(() => {
+    const initSession = async () => {
+      try {
+        const session = await getOrCreateActiveSession();
+        setSessionId(session.id);
+      } catch (err) {
+        console.error("Error initializing session:", err);
+        setError("Failed to initialize session.");
+      }
+    };
+
+    if (human) {
+      initSession();
+    }
+  }, [human]);
+
+  // Start video stream
+  const startVideo = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          facingMode: "user",
+        },
+      });
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play();
+        setIsScanning(true);
+      }
+    } catch (err) {
+      console.error("Error accessing camera:", err);
+      setError("Failed to access camera. Please grant camera permissions.");
+    }
+  }, []);
+
+  // Stop video stream
+  const stopVideo = useCallback(() => {
+    if (videoRef.current?.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach((track) => track.stop());
+      videoRef.current.srcObject = null;
+    }
+    setIsScanning(false);
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+    lastProcessedFacesRef.current.clear();
+  }, []);
+
+  // Process frame and detect faces
+  const processFrame = useCallback(async () => {
+    if (!human || !videoRef.current || !canvasRef.current || !isScanning) {
+      return;
+    }
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+
+    if (!ctx || video.readyState !== video.HAVE_ENOUGH_DATA) {
+      animationFrameRef.current = requestAnimationFrame(processFrame);
+      return;
+    }
+
+    // Set canvas dimensions to match video
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    // Draw video frame to canvas
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    // Detect faces
+    const result: Result = await human.detect(canvas);
+
+    // Process detected faces
+    const faces: FaceDetection[] = [];
+    const currentFaceIds = new Set<string>();
+
+    if (result.face && result.face.length > 0) {
+      for (let i = 0; i < result.face.length; i++) {
+        const face = result.face[i];
+        if (!face.box || !face.embedding) continue;
+
+        // Generate a stable ID for this face based on position
+        const faceId = `face-${i}-${Math.round(face.box[0])}-${Math.round(face.box[1])}`;
+        currentFaceIds.add(faceId);
+
+        // Check if we've already processed this face
+        const isNewFace = !lastProcessedFacesRef.current.has(faceId);
+
+        let identityId: string | undefined;
+        let identityName: string | undefined;
+
+        // Try to match face with existing identity
+        if (face.embedding && face.embedding.length > 0) {
+          try {
+            const matchedIdentity = await findIdentityByFaceEmbedding(Array.from(face.embedding));
+            if (matchedIdentity) {
+              identityId = matchedIdentity.id;
+              identityName = matchedIdentity.name;
+            }
+          } catch (err) {
+            console.error("Error matching identity:", err);
+          }
+        }
+
+        // Create event for new faces or unrecognized faces
+        if (isNewFace && sessionId) {
+          try {
+            const content = identityName
+              ? `Recognized ${identityName}`
+              : "Detected unknown face";
+            
+            await createEvent({
+              sessionId,
+              type: "VISUAL_OBSERVATION",
+              content,
+              relatedIdentityId: identityId || null,
+            });
+
+            if (onEventCreated) {
+              onEventCreated();
+            }
+          } catch (err) {
+            console.error("Error creating event:", err);
+          }
+        }
+
+        faces.push({
+          faceId,
+          confidence: face.score || 0,
+          box: {
+            x: face.box[0],
+            y: face.box[1],
+            width: face.box[2],
+            height: face.box[3],
+          },
+          embedding: face.embedding ? Array.from(face.embedding) : undefined,
+          identityId,
+          identityName,
+        });
+      }
+    }
+
+    // Update detected faces
+    setDetectedFaces(faces);
+
+    // Update processed faces set
+    lastProcessedFacesRef.current = currentFaceIds;
+
+    // Draw bounding boxes
+    ctx.strokeStyle = "#00ff00";
+    ctx.lineWidth = 2;
+    ctx.font = "16px Arial";
+    ctx.fillStyle = "#00ff00";
+
+    faces.forEach((face) => {
+      ctx.strokeRect(face.box.x, face.box.y, face.box.width, face.box.height);
+      const label = face.identityName || "Unknown";
+      ctx.fillText(label, face.box.x, face.box.y - 5);
+    });
+
+    // Continue processing
+    animationFrameRef.current = requestAnimationFrame(processFrame);
+  }, [human, isScanning, sessionId, onEventCreated]);
+
+  // Start processing when scanning
+  useEffect(() => {
+    if (isScanning && human) {
+      animationFrameRef.current = requestAnimationFrame(processFrame);
+    }
+
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [isScanning, human, processFrame]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopVideo();
+    };
+  }, [stopVideo]);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="relative">
+        <video
+          ref={videoRef}
+          className="hidden"
+          autoPlay
+          playsInline
+          muted
+        />
+        <canvas
+          ref={canvasRef}
+          className="w-full max-w-4xl rounded-lg border border-gray-300 bg-black"
+        />
+      </div>
+
+      <div className="flex gap-2">
+        {!isScanning ? (
+          <button
+            onClick={startVideo}
+            disabled={!human || !!error}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+          >
+            Start Scanning
+          </button>
+        ) : (
+          <button
+            onClick={stopVideo}
+            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+          >
+            Stop Scanning
+          </button>
+        )}
+      </div>
+
+      {error && (
+        <div className="p-4 bg-red-100 border border-red-400 text-red-700 rounded">
+          {error}
+        </div>
+      )}
+
+      {detectedFaces.length > 0 && (
+        <div className="p-4 bg-gray-100 rounded">
+          <h3 className="font-semibold mb-2">Detected Faces: {detectedFaces.length}</h3>
+          <div className="space-y-1">
+            {detectedFaces.map((face) => (
+              <div key={face.faceId} className="text-sm">
+                {face.identityName || "Unknown"} ({(face.confidence * 100).toFixed(1)}%)
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
