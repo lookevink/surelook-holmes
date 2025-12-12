@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { Human, Config, Result } from "@vladmandic/human";
-import { createEvent, getOrCreateActiveSession } from "@/lib/events";
-import { findIdentityByFaceEmbedding } from "@/lib/identities";
+import { getOrCreateActiveSession } from "@/lib/events";
+import { processFace } from "@/app/actions/process-face";
 
 interface FaceDetection {
   faceId: string;
@@ -52,6 +52,7 @@ export default function FaceScanner({ onEventCreated }: FaceScannerProps) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const lastProcessedFacesRef = useRef<Set<string>>(new Set());
+  const faceNamesRef = useRef<Map<string, string>>(new Map());
 
   // Initialize Human.js
   useEffect(() => {
@@ -122,6 +123,7 @@ export default function FaceScanner({ onEventCreated }: FaceScannerProps) {
       cancelAnimationFrame(animationFrameRef.current);
     }
     lastProcessedFacesRef.current.clear();
+    faceNamesRef.current.clear();
   }, []);
 
   // Process frame and detect faces
@@ -158,49 +160,34 @@ export default function FaceScanner({ onEventCreated }: FaceScannerProps) {
         const face = result.face[i];
         if (!face.box || !face.embedding) continue;
 
-        // Generate a stable ID for this face based on position
-        const faceId = `face-${i}-${Math.round(face.box[0])}-${Math.round(face.box[1])}`;
+        // Generate a stable ID for this face based on position (snapped to 50px grid)
+        const gridX = Math.round(face.box[0] / 50) * 50;
+        const gridY = Math.round(face.box[1] / 50) * 50;
+        const faceId = `face-${i}-${gridX}-${gridY}`;
+        
         currentFaceIds.add(faceId);
 
         // Check if we've already processed this face
         const isNewFace = !lastProcessedFacesRef.current.has(faceId);
 
-        let identityId: string | undefined;
-        let identityName: string | undefined;
+        const identityName = faceNamesRef.current.get(faceId);
 
-        // Try to match face with existing identity
-        if (face.embedding && face.embedding.length > 0) {
-          try {
-            const matchedIdentity = await findIdentityByFaceEmbedding(Array.from(face.embedding));
-            if (matchedIdentity) {
-              identityId = matchedIdentity.id;
-              identityName = matchedIdentity.name;
-            }
-          } catch (err) {
-            console.error("Error matching identity:", err);
-          }
-        }
-
-        // Create event for new faces or unrecognized faces
-        if (isNewFace && sessionId) {
-          try {
-            const content = identityName
-              ? `Recognized ${identityName}`
-              : "Detected unknown face";
-            
-            await createEvent({
-              sessionId,
-              type: "VISUAL_OBSERVATION",
-              content,
-              relatedIdentityId: identityId || null,
+        // Process new faces with server action
+        if (isNewFace && sessionId && face.embedding.length > 0) {
+          // Fire and forget (or handle promise)
+          processFace(Array.from(face.embedding), sessionId)
+            .then((result) => {
+              if (result.identityName) {
+                faceNamesRef.current.set(faceId, result.identityName);
+                // Force a re-render if needed, but the next frame will pick it up
+              }
+              if (onEventCreated) {
+                onEventCreated();
+              }
+            })
+            .catch((err) => {
+              console.error("Error processing face:", err);
             });
-
-            if (onEventCreated) {
-              onEventCreated();
-            }
-          } catch (err) {
-            console.error("Error creating event:", err);
-          }
         }
 
         faces.push({
@@ -213,7 +200,6 @@ export default function FaceScanner({ onEventCreated }: FaceScannerProps) {
             height: face.box[3],
           },
           embedding: face.embedding ? Array.from(face.embedding) : undefined,
-          identityId,
           identityName,
         });
       }

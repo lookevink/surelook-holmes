@@ -10,6 +10,7 @@
     "seed": "tsx scripts/seed.ts"
   },
   "dependencies": {
+    "@elevenlabs/react": "^0.12.1",
     "@supabase/supabase-js": "^2.87.1",
     "@tensorflow/tfjs-node": "^4.22.0",
     "@vladmandic/human": "^3.3.6",

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import FaceScanner from "@/components/FaceScanner";
 import EventStream from "@/components/EventStream";
+import VoiceManager from "@/components/VoiceManager";
 
 export default function Home() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -34,6 +35,7 @@ export default function Home() {
           </div>
         </div>
       </main>
+      <VoiceManager />
     </div>
   );
 }

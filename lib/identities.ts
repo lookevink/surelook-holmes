@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { supabase } from "./supabase";
 import type { Database } from "./database.types";
 
@@ -17,7 +18,7 @@ export async function createIdentity(params: {
       relationship_status: params.relationshipStatus || null,
       face_embedding: params.faceEmbedding || null,
       metadata: params.metadata || {},
-    })
+    } as any)
     .select()
     .single();
 
@@ -45,10 +46,10 @@ export async function findIdentityByFaceEmbedding(
     // The query uses the <=> operator for cosine distance
     // Lower distance = higher similarity
     const { data, error } = await supabase.rpc("match_identity_by_face", {
-      query_embedding: embedding,
+      query_embedding: embedding as any,
       match_threshold: threshold,
       match_count: 1,
-    });
+    } as any) as { data: any; error: any };
 
     if (error) {
       // If the function doesn't exist, return null gracefully
@@ -62,7 +63,12 @@ export async function findIdentityByFaceEmbedding(
       throw error;
     }
 
-    return data && data.length > 0 ? data[0] : null;
+    return (data && data.length > 0 ? data[0] : null) as {
+      id: string;
+      name: string;
+      relationship_status: string | null;
+      similarity: number;
+    } | null;
   } catch (error) {
     console.error("Error in findIdentityByFaceEmbedding:", error);
     return null;
