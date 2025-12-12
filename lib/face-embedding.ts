@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Utility functions for generating face embeddings from images
  */
@@ -13,7 +14,7 @@ export async function generateFaceEmbeddingFromUrl(
 ): Promise<number[] | null> {
   try {
     console.log(`[FACE-EMBEDDING] Starting embedding generation for: ${imageUrl}`);
-    
+
     // Download the image
     const response = await fetch(imageUrl);
     if (!response.ok) {
@@ -29,42 +30,42 @@ export async function generateFaceEmbeddingFromUrl(
     // Import TensorFlow.js Node.js backend first
     // IMPORTANT: Import @tensorflow/tfjs-node which automatically registers the tensorflow backend
     const tf = await import("@tensorflow/tfjs-node");
-    
+
     // Explicitly set backend to tensorflow before any operations
     // This is required for tf.node.decodeImage to work
     console.log(`[FACE-EMBEDDING] Setting TensorFlow backend...`);
     await tf.setBackend("tensorflow");
     await tf.ready;
-    
+
     const backend = tf.getBackend();
     console.log(`[FACE-EMBEDDING] TensorFlow.js backend ready: ${backend}`);
-    
+
     if (backend !== "tensorflow") {
       throw new Error(`Failed to set TensorFlow backend. Current backend: ${backend}`);
     }
-    
+
     // Decode image to tensor FIRST (before initializing Human.js)
     // This requires TensorFlow backend
     console.log(`[FACE-EMBEDDING] Decoding image to tensor...`);
     const imageTensor = tf.node.decodeImage(buffer, 3); // 3 channels (RGB)
     console.log(`[FACE-EMBEDDING] Image tensor shape:`, imageTensor.shape);
-    
+
     // Now import Human.js - use default import
     const HumanModule = await import("@vladmandic/human");
     const HumanLibrary = HumanModule.default || HumanModule.Human || (HumanModule as any).Human;
-    
+
     if (!HumanLibrary) {
       imageTensor.dispose();
       throw new Error("Could not import Human library");
     }
-    
+
     // Use tensorflow backend for Human.js since we're using TensorFlow tensors
     const human = new HumanLibrary({
       backend: "tensorflow", // Use tensorflow backend to work with TensorFlow tensors
       modelBasePath: "https://unpkg.com/@vladmandic/human/models/",
       face: {
         enabled: true,
-        detector: { 
+        detector: {
           enabled: true,
           minConfidence: 0.5,
         },
@@ -107,10 +108,10 @@ export async function generateFaceEmbeddingFromUrl(
     let embedding: number[];
     if (Array.isArray(face.embedding)) {
       embedding = face.embedding;
-    } else if (face.embedding instanceof Float32Array) {
+    } else if ((face.embedding as any) instanceof Float32Array) {
       embedding = Array.from(face.embedding);
-    } else if (face.embedding instanceof ArrayBuffer) {
-      embedding = Array.from(new Float32Array(face.embedding));
+    } else if ((face.embedding as any) instanceof ArrayBuffer) {
+      embedding = Array.from(new Float32Array(face.embedding as any));
     } else {
       // Try to convert to array - might be a tensor
       try {
@@ -121,9 +122,9 @@ export async function generateFaceEmbeddingFromUrl(
         embedding = Array.from(face.embedding as any);
       }
     }
-    
+
     console.log(`[FACE-EMBEDDING] Embedding generated, length: ${embedding.length}`);
-    
+
     // Ensure it's 1024 dimensions (pad or truncate if needed)
     if (embedding.length !== 1024) {
       console.warn(
