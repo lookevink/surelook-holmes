@@ -133,15 +133,24 @@ export async function importCSV(csvContent: string): Promise<CSVImportResult> {
         }
 
         // Generate face embedding from headshot URL
-        const embedding = await generateFaceEmbeddingFromUrl(
-          row.headshot_media_url
-        );
+        let embedding: number[] | null = null;
+        let embeddingError: string | null = null;
+        
+        try {
+          embedding = await generateFaceEmbeddingFromUrl(
+            row.headshot_media_url
+          );
+        } catch (error) {
+          embeddingError = error instanceof Error ? error.message : String(error);
+          console.error(`[CSV-IMPORT] Error generating embedding for ${row.name}:`, error);
+        }
 
         if (!embedding) {
           result.skipped++;
-          result.errors.push(
-            `Skipped ${row.name}: Could not generate embedding from headshot URL`
-          );
+          const errorMsg = embeddingError 
+            ? `Skipped ${row.name}: ${embeddingError}`
+            : `Skipped ${row.name}: Could not generate embedding from headshot URL (check server logs for details)`;
+          result.errors.push(errorMsg);
           continue;
         }
 
