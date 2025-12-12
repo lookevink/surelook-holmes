@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import FaceScanner from "@/components/FaceScanner";
+import SherlockScanner from "./components/SherlockScanner";
 import EventStream from "@/components/EventStream";
-import VoiceManager from "@/components/VoiceManager";
+import VoiceManager from "./components/VoiceManager";
 
 export default function Home() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -27,7 +27,7 @@ export default function Home() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <div className="space-y-4">
             <h2 className="text-2xl font-semibold">Face Scanner</h2>
-            <FaceScanner onEventCreated={handleEventCreated} />
+            <SherlockScanner />
           </div>
 
           <div className="space-y-4">

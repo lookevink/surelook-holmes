@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { Human, Config, Result } from "@vladmandic/human";
 import { getOrCreateActiveSession } from "@/lib/events";
-import { processFace } from "@/app/actions/process-face";
+import { processFaceDetection } from "@/app/actions/process-face";
+import { FaceDetectionResult } from "@/app/actions/process-face";
 
 interface FaceDetection {
   faceId: string;
@@ -175,10 +176,10 @@ export default function FaceScanner({ onEventCreated }: FaceScannerProps) {
         // Process new faces with server action
         if (isNewFace && sessionId && face.embedding.length > 0) {
           // Fire and forget (or handle promise)
-          processFace(Array.from(face.embedding), sessionId)
-            .then((result) => {
-              if (result.identityName) {
-                faceNamesRef.current.set(faceId, result.identityName);
+          processFaceDetection(Array.from(face.embedding))
+            .then((result: FaceDetectionResult) => {
+              if (result.name) {
+                faceNamesRef.current.set(faceId, result.name);
                 // Force a re-render if needed, but the next frame will pick it up
               }
               if (onEventCreated) {
